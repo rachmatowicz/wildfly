@@ -21,35 +21,21 @@
  */
 package org.jboss.as.clustering.infinispan.subsystem;
 
-import javax.management.MBeanServer;
 import javax.transaction.TransactionManager;
 import javax.transaction.TransactionSynchronizationRegistry;
-import java.util.Map;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.infinispan.config.Configuration;
+import org.infinispan.manager.CacheContainer;
 import org.jboss.msc.value.Value;
-import org.jboss.tm.XAResourceRecoveryRegistry;
 
 /**
- * @author Paul Ferraro
+ * Class to hold all injection targets required for configuring CacheService
+ *
+ * @author Richard Achmatowicz
  */
-public interface EmbeddedCacheManagerConfiguration {
-
+public interface CacheConfigurationHelper {
     String getName();
-    String getDefaultCache();
-    Map<String, Configuration> getConfigurations();
-
-    TransportConfiguration getTransportConfiguration();
-    EmbeddedCacheManagerDefaults getDefaults();
+    CacheContainer getCacheContainer();
+    EmbeddedCacheManagerDefaults getEmbeddedCacheManagerDefaults();
     Value<TransactionManager> getTransactionManager();
     Value<TransactionSynchronizationRegistry> getTransactionSynchronizationRegistry();
-    XAResourceRecoveryRegistry getXAResourceRecoveryRegistry();
-    MBeanServer getMBeanServer();
-    Executor getListenerExecutor();
-    ScheduledExecutorService getEvictionExecutor();
-    ScheduledExecutorService getReplicationQueueExecutor();
-    AtomicBoolean getTransportRequired();
 }

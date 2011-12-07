@@ -22,49 +22,44 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
-import java.util.ArrayList;
-import java.util.List;
+import javax.transaction.TransactionManager;
+import javax.transaction.TransactionSynchronizationRegistry;
 
 import org.infinispan.Cache;
 import org.infinispan.config.Configuration;
+import org.infinispan.config.FluentConfiguration;
 import org.infinispan.manager.CacheContainer;
 import org.infinispan.manager.EmbeddedCacheManager;
-import org.jboss.as.network.OutboundSocketBinding;
+import org.jboss.as.clustering.infinispan.TransactionManagerProvider;
+import org.jboss.as.clustering.infinispan.TransactionSynchronizationRegistryProvider;
+import org.jboss.logging.Logger;
+import org.jboss.msc.inject.Injector;
 import org.jboss.msc.service.Service;
-import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceName;
-import org.jboss.msc.service.ServiceTarget;
 import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
 import org.jboss.msc.service.StopContext;
 import org.jboss.msc.value.InjectedValue;
+import org.jboss.msc.value.Value;
 
 /**
  * @author Paul Ferraro
+ * @author Richard Achmatowicz (c) 2011 Red Hat Inc.
  */
 public class CacheService<K, V> implements Service<Cache<K, V>> {
+
+    private static final Logger log = Logger.getLogger(CacheService.class.getPackage().getName()) ;
+
     private final InjectedValue<CacheContainer> container = new InjectedValue<CacheContainer>();
     private final String name;
-    private final String template;
     private volatile Cache<K, V> cache;
 
     public static ServiceName getServiceName(String container, String cache) {
         return EmbeddedCacheManagerService.getServiceName(container).append((cache != null) ? cache : CacheContainer.DEFAULT_CACHE_NAME);
     }
 
-    ServiceBuilder<Cache<K, V>> build(ServiceTarget target, ServiceName containerName) {
-        return target.addService(containerName.append(this.name), this)
-            .addDependency(containerName, CacheContainer.class, this.container)
-        ;
-    }
-
     public CacheService(String name) {
-        this(name, null);
-    }
-
-    public CacheService(String name, String template) {
         this.name = name;
-        this.template = null;
     }
 
     /**
@@ -76,17 +71,28 @@ public class CacheService<K, V> implements Service<Cache<K, V>> {
         return this.cache;
     }
 
+    public Injector<CacheContainer> getCacheContainerInjector() {
+        return this.container;
+    }
+
+    public CacheContainer getCacheContainer() {
+        return this.container.getValue();
+    }
+
     /**
      * {@inheritDoc}
      * @see org.jboss.msc.service.Service#start(org.jboss.msc.service.StartContext)
      */
     @Override
     public void start(StartContext context) throws StartException {
-        CacheContainer container = this.container.getValue();
-        if (this.template != null) {
-            ((EmbeddedCacheManager) container).defineConfiguration(this.name, this.template, new Configuration());
-        }
+
+        CacheContainer container = this.getCacheContainer();
+
+        // get an instance of the defined cache
         this.cache = container.getCache(this.name);
+
+        // advertise
+        log.debugf("Cache %s started", this.name);
     }
 
     /**
@@ -95,6 +101,11 @@ public class CacheService<K, V> implements Service<Cache<K, V>> {
      */
     @Override
     public void stop(StopContext context) {
+        // have to be careful here as we are leaving a named configuration in the cache-container
+        // this may cause problems if the cache name is reused with a different cache type as the
+        // original cache definition will be takes as base config
         this.cache.stop();
+
+        log.debugf("Cache %s stopped", this.name);
     }
 }
