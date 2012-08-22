@@ -21,6 +21,9 @@
  */
 package org.jboss.as.clustering.jgroups;
 
+import static org.jboss.as.clustering.jgroups.JGroupsLogger.ROOT_LOGGER;
+import static org.jboss.as.clustering.jgroups.JGroupsMessages.MESSAGES;
+
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,8 +50,6 @@ import org.jgroups.jmx.JmxConfigurator;
 import org.jgroups.protocols.TP;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.SocketFactory;
-
-import static org.jboss.as.clustering.jgroups.JGroupsLogger.ROOT_LOGGER;
 
 /**
  * @author Paul Ferraro
@@ -235,12 +236,24 @@ public class JChannelFactory implements ChannelFactory, ChannelListener, Protoco
         String protocol = protocolConfig.getName();
         final Map<String, String> properties = new HashMap<String, String>(this.configuration.getDefaults().getProperties(protocol));
         properties.putAll(protocolConfig.getProperties());
-        return new org.jgroups.conf.ProtocolConfiguration(protocol, properties) {
-            @Override
-            public Map<String, String> getOriginalProperties() {
-                return properties;
-            }
-        };
+
+        // set up a JGroups protocol configuration string so we may use config string constructor (JBPAPP-9504)
+        String config_str = null ;
+        if (!properties.isEmpty()) {
+            String properties_str = org.jgroups.util.Util.printMapWithDelimiter(properties, ";");
+            config_str = protocol + "(" + properties_str + ")" ;
+        } else {
+            config_str = protocol ;
+        }
+
+        org.jgroups.conf.ProtocolConfiguration jgroupsProtocolConfig = null ;
+        try {
+            jgroupsProtocolConfig = new org.jgroups.conf.ProtocolConfiguration(config_str);
+        }
+        catch(Exception e) {
+           throw MESSAGES.failedToCreateProtocolFromConfigString(e, protocol, config_str);
+        }
+        return jgroupsProtocolConfig ;
     }
 
     private void setValue(Protocol protocol, String property, Object value) {

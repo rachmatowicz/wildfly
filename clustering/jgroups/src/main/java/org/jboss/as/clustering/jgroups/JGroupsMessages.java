@@ -25,6 +25,7 @@ package org.jboss.as.clustering.jgroups;
 import java.net.URL;
 
 import org.jboss.as.controller.OperationFailedException;
+import org.jboss.logging.Cause;
 import org.jboss.logging.Message;
 import org.jboss.logging.MessageBundle;
 import org.jboss.logging.Messages;
@@ -69,5 +70,8 @@ public interface JGroupsMessages {
 
     @Message(id = 10274, value = "Protocol list for stack %s is not defined. Please specify both a transport and protocol list, either as optional parameters to add() or via batching.")
     OperationFailedException protocolListNotDefined(String stackName);
+
+    @Message(id = 10275, value = "Failed to create JGroups protocol %s from config string %s")
+    IllegalStateException failedToCreateProtocolFromConfigString(@Cause Throwable cause, String protocol, String config_string);
 
 }
