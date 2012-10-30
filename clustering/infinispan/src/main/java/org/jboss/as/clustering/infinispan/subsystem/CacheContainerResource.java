@@ -131,12 +131,15 @@ public class CacheContainerResource extends SimpleResourceDefinition {
             .build();
 
     private final ResolvePathHandler resolvePathHandler;
-    public CacheContainerResource(final ResolvePathHandler resolvePathHandler) {
+    private final boolean runtimeRegistration;
+
+    public CacheContainerResource(final ResolvePathHandler resolvePathHandler, boolean runtimeRegistration) {
         super(CONTAINER_PATH,
                 InfinispanExtension.getResourceDescriptionResolver(ModelKeys.CACHE_CONTAINER),
                 CacheContainerAdd.INSTANCE,
                 CacheContainerRemove.INSTANCE);
         this.resolvePathHandler = resolvePathHandler;
+        this.runtimeRegistration = runtimeRegistration ;
     }
 
     @Override
@@ -147,6 +150,11 @@ public class CacheContainerResource extends SimpleResourceDefinition {
         final OperationStepHandler writeHandler = new CacheContainerWriteAttributeHandler(CACHE_CONTAINER_ATTRIBUTES);
         for (AttributeDefinition attr : CACHE_CONTAINER_ATTRIBUTES) {
             resourceRegistration.registerReadWriteAttribute(attr, CacheContainerReadAttributeHandler.INSTANCE, writeHandler);
+        }
+
+        // register runtime cache container read-only metrics (attributes and handlers)
+        if(runtimeRegistration) {
+            CacheContainerMetricsHandler.INSTANCE.registerMetrics(resourceRegistration);
         }
     }
 
@@ -164,9 +172,13 @@ public class CacheContainerResource extends SimpleResourceDefinition {
 
         // child resources
         resourceRegistration.registerSubModel(new TransportResource());
-        resourceRegistration.registerSubModel(new LocalCacheResource(resolvePathHandler));
-        resourceRegistration.registerSubModel(new InvalidationCacheResource(resolvePathHandler));
-        resourceRegistration.registerSubModel(new ReplicatedCacheResource(resolvePathHandler));
-        resourceRegistration.registerSubModel(new DistributedCacheResource(resolvePathHandler));
+        resourceRegistration.registerSubModel(new LocalCacheResource(resolvePathHandler,isRuntimeRegistration()));
+        resourceRegistration.registerSubModel(new InvalidationCacheResource(resolvePathHandler, isRuntimeRegistration()));
+        resourceRegistration.registerSubModel(new ReplicatedCacheResource(resolvePathHandler,isRuntimeRegistration()));
+        resourceRegistration.registerSubModel(new DistributedCacheResource(resolvePathHandler,isRuntimeRegistration()));
+    }
+
+    public boolean isRuntimeRegistration() {
+        return runtimeRegistration;
     }
 }

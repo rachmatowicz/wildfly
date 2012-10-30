@@ -106,4 +106,31 @@ public interface InfinispanLogger extends BasicLogger {
     @Message(id = 10286, value = "Attribute 'virtual-nodes' has been deprecated and has no effect.")
     void virtualNodesAttributeDeprecated();
 
+    /**
+     * Logs a warn message indicating that named cache container metric is not defined.
+     */
+    @LogMessage(level = WARN)
+    @Message(id = 10287, value = "'The metric %s for cache container %s is not defined.")
+    void cacheContainerMetricNotDefined(String metricName, String containerName);
+
+    /**
+     * Logs a warn message indicating that named cache container metric is not available.
+     */
+    @LogMessage(level = WARN)
+    @Message(id = 10288, value = "'The metric %s for cache container %s is not available. The cache container is not started.")
+    void cacheContainerMetricNotAvailable(String metricName, String containerName);
+
+    /**
+     * Logs a warn message indicating that named cache metric is not defined.
+     */
+    @LogMessage(level = WARN)
+    @Message(id = 10289, value = "'The metric %s for cache %s is not defined.")
+    void cacheMetricNotDefined(String metricName, String cacheName);
+
+    /**
+     * Logs a warn message indicating that named cache metric is not available.
+     */
+    @LogMessage(level = WARN)
+    @Message(id = 10290, value = "'The metric %s for cache %s is not available. The cache is not started.")
+    void cacheMetricNotAvailable(String metricName, String cacheName);
 }

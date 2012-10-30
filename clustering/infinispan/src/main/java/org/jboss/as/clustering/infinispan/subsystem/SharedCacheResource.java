@@ -37,8 +37,8 @@ import org.jboss.as.controller.services.path.ResolvePathHandler;
  */
 public class SharedCacheResource extends ClusteredCacheResource {
 
-    public SharedCacheResource(PathElement pathElement, ResourceDescriptionResolver descriptionResolver, AbstractAddStepHandler addHandler, OperationStepHandler removeHandler, ResolvePathHandler resolvePathHandler) {
-        super(pathElement, descriptionResolver, addHandler, removeHandler, resolvePathHandler);
+    public SharedCacheResource(PathElement pathElement, ResourceDescriptionResolver descriptionResolver, AbstractAddStepHandler addHandler, OperationStepHandler removeHandler, ResolvePathHandler resolvePathHandler, boolean runtimeRegistration) {
+        super(pathElement, descriptionResolver, addHandler, removeHandler, resolvePathHandler, runtimeRegistration);
     }
 
     @Override

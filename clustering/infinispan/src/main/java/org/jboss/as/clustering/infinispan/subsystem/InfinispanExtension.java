@@ -90,7 +90,8 @@ public class InfinispanExtension implements Extension {
             resolvePathHandler = null;
         }
 
-        subsystem.registerSubsystemModel(new InfinispanSubsystemRootResource(resolvePathHandler));
+        final boolean registerRuntimeOnly = context.isRuntimeOnlyRegistrationValid();
+        subsystem.registerSubsystemModel(new InfinispanSubsystemRootResource(resolvePathHandler, registerRuntimeOnly));
 
         subsystem.registerXMLElementWriter(new InfinispanSubsystemXMLWriter());
 
@@ -147,11 +148,42 @@ public class InfinispanExtension implements Extension {
             sharedAttributeResolver.put(CacheResource.NAME.getName(), "cache");
             sharedAttributeResolver.put(CacheResource.START.getName(), "cache");
 
+            sharedAttributeResolver.put(MetricKeys.CACHE_STATUS, "cache");
+            sharedAttributeResolver.put(MetricKeys.NUMBER_OF_LOCKS_AVAILABLE, "cache");
+            sharedAttributeResolver.put(MetricKeys.NUMBER_OF_LOCKS_HELD, "cache");
+            sharedAttributeResolver.put(MetricKeys.CONCURRENCY_LEVEL, "cache");
+            sharedAttributeResolver.put(MetricKeys.AVERAGE_READ_TIME, "cache");
+            sharedAttributeResolver.put(MetricKeys.AVERAGE_WRITE_TIME, "cache");
+            sharedAttributeResolver.put(MetricKeys.ELAPSED_TIME, "cache");
+            sharedAttributeResolver.put(MetricKeys.EVICTIONS, "cache");
+            sharedAttributeResolver.put(MetricKeys.HIT_RATIO, "cache");
+            sharedAttributeResolver.put(MetricKeys.HITS, "cache");
+            sharedAttributeResolver.put(MetricKeys.MISSES, "cache");
+            sharedAttributeResolver.put(MetricKeys.NUMBER_OF_ENTRIES, "cache");
+            sharedAttributeResolver.put(MetricKeys.READ_WRITE_RATIO, "cache");
+            sharedAttributeResolver.put(MetricKeys.REMOVE_HITS, "cache");
+            sharedAttributeResolver.put(MetricKeys.REMOVE_MISSES, "cache");
+            sharedAttributeResolver.put(MetricKeys.STORES, "cache");
+            sharedAttributeResolver.put(MetricKeys.TIME_SINCE_RESET, "cache");
+            sharedAttributeResolver.put(MetricKeys.COMMITS, "cache");
+            sharedAttributeResolver.put(MetricKeys.PREPARES, "cache");
+            sharedAttributeResolver.put(MetricKeys.ROLLBACKS, "cache");
+            sharedAttributeResolver.put(MetricKeys.INVALIDATIONS, "cache");
+            sharedAttributeResolver.put(MetricKeys.PASSIVATIONS, "cache");
+            sharedAttributeResolver.put(MetricKeys.ACTIVATIONS, "cache");
+            sharedAttributeResolver.put(MetricKeys.CACHE_LOADER_LOADS, "cache");
+            sharedAttributeResolver.put(MetricKeys.CACHE_LOADER_MISSES, "cache");
+
             sharedAttributeResolver.put(ClusteredCacheResource.ASYNC_MARSHALLING.getName(), "clustered-cache");
             sharedAttributeResolver.put(ClusteredCacheResource.MODE.getName(), "clustered-cache");
             sharedAttributeResolver.put(ClusteredCacheResource.QUEUE_FLUSH_INTERVAL.getName(), "clustered-cache");
             sharedAttributeResolver.put(ClusteredCacheResource.QUEUE_SIZE.getName(), "clustered-cache");
             sharedAttributeResolver.put(ClusteredCacheResource.REMOTE_TIMEOUT.getName(), "clustered-cache");
+
+            sharedAttributeResolver.put(MetricKeys.AVERAGE_REPLICATION_TIME, "clustered-cache");
+            sharedAttributeResolver.put(MetricKeys.REPLICATION_COUNT, "clustered-cache");
+            sharedAttributeResolver.put(MetricKeys.REPLICATION_FAILURES, "clustered-cache");
+            sharedAttributeResolver.put(MetricKeys.SUCCESS_RATIO, "clustered-cache");
 
             sharedAttributeResolver.put(BaseStoreResource.FETCH_STATE.getName(), "store");
             sharedAttributeResolver.put(BaseStoreResource.PASSIVATION.getName(), "store");
