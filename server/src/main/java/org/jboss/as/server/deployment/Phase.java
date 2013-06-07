@@ -486,6 +486,7 @@ public enum Phase {
     public static final int POST_MODULE_WS_SERVICES_DEPS                = 0x3200;
     public static final int POST_MODULE_RAR_SERVICES_DEPS               = 0x3300;
     public static final int POST_MODULE_UNDERTOW_MODCLUSTER             = 0x3400;
+    public static final int POST_MODULE_CLUSTERED_DEPLOYMENT_REPOSITORY_DEPENDENCIES = 0x3500;
 
     // INSTALL
     public static final int INSTALL_SHARED_SESSION_MANAGER              = 0x0100;
@@ -536,6 +537,7 @@ public enum Phase {
     public static final int INSTALL_BUNDLE_ACTIVATE                     = 0x2040;
     public static final int INSTALL_WAB_SERVLETCONTEXT_SERVICE          = 0x2050;
     public static final int INSTALL_PERSISTENCE_SERVICES                = 0x2060;
+    public static final int INSTALL_CLUSTERED_DEPLOYMENT_REPOSITORY     = 0x2070;
     public static final int INSTALL_DEPLOYMENT_COMPLETE_SERVICE         = 0x2100;
 
     // CLEANUP
