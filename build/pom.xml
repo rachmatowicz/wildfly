@@ -974,6 +974,16 @@
 
                 <dependency>
                     <groupId>org.wildfly</groupId>
+                    <artifactId>wildfly-clustering-diagnostics-extension</artifactId>
+                </dependency>
+
+                <dependency>
+                    <groupId>org.wildfly</groupId>
+                    <artifactId>wildfly-clustering-diagnostics-services</artifactId>
+                </dependency>
+
+                <dependency>
+                    <groupId>org.wildfly</groupId>
                     <artifactId>wildfly-clustering-server</artifactId>
                 </dependency>
 
@@ -994,6 +1004,7 @@
                     <groupId>org.wildfly</groupId>
                     <artifactId>wildfly-clustering-web-spi</artifactId>
                 </dependency>
+
                 <dependency>
                     <groupId>org.wildfly</groupId>
                     <artifactId>wildfly-clustering-web-undertow</artifactId>
