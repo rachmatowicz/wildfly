@@ -50,5 +50,10 @@
         <module name="org.jboss.vfs"/>
         <module name="org.jboss.metadata.common"/>
         <module name="org.jboss.as.naming"/>
+        <!--module name="org.jboss.threads"/-->
+        <!--module name="org.jgroups"/-->
+        <!--module name="org.wildfly.clustering.api"/-->
+        <!--module name="org.wildfly.clustering.singleton"/-->
+        <!--module name="org.wildfly.extension.cluster" services="import" optional="true"/-->
     </dependencies>
 </module>

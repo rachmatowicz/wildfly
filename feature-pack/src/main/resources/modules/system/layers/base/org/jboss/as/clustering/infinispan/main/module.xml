@@ -68,6 +68,9 @@
         <module name="org.wildfly.clustering.jgroups.spi"/>
         <module name="org.wildfly.clustering.service"/>
         <module name="org.wildfly.clustering.spi"/>
+        <!--module name="org.wildfly.clustering.api" optional="true"/-->
+        <!--module name="org.wildfly.clustering.diagnostics.services" services="import" optional="true"/-->
+        <!--module name="org.wildfly.clustering.server" services="import" optional="true"/-->
         <module name="org.wildfly.security.manager"/>
     </dependencies>
 </module>
