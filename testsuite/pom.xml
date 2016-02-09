@@ -116,6 +116,8 @@
         <!-- Additional JVM args, like those for EC2. -->
         <jvm.args.other>-server</jvm.args.other>
 
+        <!-- Byteman config for test -->
+        <jvm.args.byteman>-Dorg.jboss.byteman.transform.all=true -Djboss.modules.system.pkgs=org.jboss.byteman -javaagent:/opt/byteman-3.0.1/lib/byteman.jar=script:/home/nrla/byteman-scripts/script-server-jgroups-threadpool.btm,script:/home/nrla/byteman-scripts/script-server-infinispan-threadpool.btm,boot:/opt/byteman-3.0.1/lib/byteman.jar,listener:false</jvm.args.byteman>
 
         <!-- JaCoCo - Code coverage (-Dcoverage). -->
         <jvm.args.jacoco></jvm.args.jacoco>
