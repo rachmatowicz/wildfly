@@ -63,6 +63,7 @@ class EJBRemoteTransactionPropagatingInterceptor implements Interceptor {
         Transaction originatingRemoteTx = null;
         // get the transaction id attachment
         final TransactionID transactionID = (TransactionID) context.getPrivateData(AttachmentKeys.TRANSACTION_ID_KEY);
+        System.out.println(this.getClass().getName() + ": Invocation has transaction id: " + transactionID);
         if (transactionID != null) {
             // if it's UserTransaction then create or resume the UserTransaction corresponding to the ID
             if (transactionID instanceof UserTransactionID) {
@@ -74,6 +75,8 @@ class EJBRemoteTransactionPropagatingInterceptor implements Interceptor {
             // suspend (on this thread) the originating tx when returning from the invocation
             originatingRemoteTx = transactionManager.getTransaction();
         }
+        // we are now in a new Transaction associated with the UserTransaction on the client
+        //
         try {
             // we are done with any tx propagation setup, let's move on
             return context.proceed();
@@ -99,10 +102,13 @@ class EJBRemoteTransactionPropagatingInterceptor implements Interceptor {
         if (alreadyCreatedTx != null) {
             // resume the already created tx
             transactionManager.resume(alreadyCreatedTx);
+            System.out.println(this.getClass().getName() + ": resuming transaction " + alreadyCreatedTx);
             return;
         }
+        System.out.println(this.getClass().getName() + ": creating transaction");
         // begin a new user transaction and add it to the tx repository
-        this.ejbRemoteTransactionsRepository.beginUserTransaction(userTransactionID);
+        Transaction newlyAssociatedTxn = this.ejbRemoteTransactionsRepository.beginUserTransaction(userTransactionID);
+        System.out.println(this.getClass().getName() + ": new uset txn is " + newlyAssociatedTxn);
     }
 
     private void createOrResumeXidTransaction(final XidTransactionID xidTransactionID) throws Exception {

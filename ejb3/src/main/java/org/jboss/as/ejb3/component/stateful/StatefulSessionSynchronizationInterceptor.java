@@ -75,10 +75,15 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
         final TransactionSynchronizationRegistry transactionSynchronizationRegistry = component.getTransactionSynchronizationRegistry();
         final Object lockOwner = getLockOwner(transactionSynchronizationRegistry);
+
+        System.out.println(this.getClass().getName() + ": lock owner (based on active txn or thread) = " + lockOwner);
+
         final AccessTimeoutDetails timeout = component.getAccessTimeout(context.getMethod());
         if (ROOT_LOGGER.isTraceEnabled()) {
             ROOT_LOGGER.trace("Trying to acquire lock: " + lock + " for stateful component instance: " + instance + " during invocation: " + context);
         }
+        System.out.println(this.getClass().getName() + ": trying to acquire lock: " + lock + " for stateful component instance: " + instance + " during invocation: " + context);
+
         // we obtain a lock in this synchronization interceptor because the lock needs to be tied to the synchronization
         // so that it can released on the tx synchronization callbacks
         boolean acquired = lock.tryLock(timeout.getValue(), timeout.getTimeUnit(), lockOwner);
@@ -89,6 +94,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
             if (ROOT_LOGGER.isTraceEnabled()) {
                 ROOT_LOGGER.trace("Acquired lock: " + lock + " for stateful component instance: " + instance + " during invocation: " + context);
             }
+            System.out.println(this.getClass().getName() + ": acquired lock: " + lock + " for stateful component instance: " + instance + " during invocation: " + context);
 
             Object currentTransactionKey = null;
             boolean wasTxSyncRegistered = false;
@@ -97,6 +103,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                 //the inner BMT interceptor is going to setup the correct transaction anyway
                 //so enrolling in an existing transaction is not correct
                 if (containerManagedTransactions) {
+                    System.out.println(this.getClass().getName() + ": using container managed txns - check if we need to register sync");
                     if (!instance.isSynchronizationRegistered()) {
                         // get the key to current transaction associated with this thread
                         currentTransactionKey = transactionSynchronizationRegistry.getTransactionKey();
@@ -112,6 +119,8 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                                 ROOT_LOGGER.trace("Registered tx synchronization: " + statefulSessionSync + " for tx: " + currentTransactionKey +
                                         " associated with stateful component instance: " + instance);
                             }
+                            System.out.println(this.getClass().getName() + ": registered tx synchronization: " + statefulSessionSync + " for tx: " + currentTransactionKey +
+                                    " associated with stateful component instance: " + instance);
                             // invoke the afterBegin callback on the SFSB
                             instance.afterBegin();
                             instance.setSynchronizationRegistered(true);
@@ -129,6 +138,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                 // SFSB instance as "no longer in use". If it registered a tx SessionSynchronization, then releasing the lock is
                 // taken care off by a tx synchronization callbacks.
                 if (!wasTxSyncRegistered && !instance.isSynchronizationRegistered()) {
+                    System.out.println(this.getClass().getName() + ": releasing instance of bean");
                     releaseInstance(instance);
                 } else if (!wasTxSyncRegistered) {
                     //if we don't release the lock here then it will be acquired multiple times
@@ -247,6 +257,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
             }
 
             // tx has completed, so mark the SFSB instance as no longer in use
+            System.out.println(this.getClass().getName() + ": calling releaseInstance in afterCompletion()");
             releaseInstance(statefulSessionComponentInstance);
         }
 

@@ -54,6 +54,7 @@ public class StatefulComponentInstanceInterceptor extends AbstractEJBInterceptor
         if (sessionId == null) {
             throw EjbLogger.ROOT_LOGGER.statefulSessionIdIsNull(component.getComponentName());
         }
+        System.out.println(this.getClass().getName() + ": looking for stateful component instance wih session id: " + sessionId);
         ROOT_LOGGER.debugf("Looking for stateful component instance with session id: %s", sessionId);
         StatefulSessionComponentInstance instance = component.getCache().get(sessionId);
         if (instance == null) {
@@ -62,6 +63,7 @@ public class StatefulComponentInstanceInterceptor extends AbstractEJBInterceptor
         }
         try {
             context.putPrivateData(ComponentInstance.class, instance);
+            System.out.println(this.getClass().getName() + ": invoking instance instance wih session id: " + sessionId);
             return context.proceed();
         } catch (Exception ex) {
             // Detect app exception

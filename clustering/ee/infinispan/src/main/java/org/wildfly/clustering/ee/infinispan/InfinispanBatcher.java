@@ -95,16 +95,38 @@ public class InfinispanBatcher implements Batcher<TransactionBatch> {
 
     @Override
     public TransactionBatch createBatch() {
+        System.out.println(this.getClass().getName() + ": entering createBatch()");
+        // we need a TM to suspend/resume
         if (this.tm == null) return NON_TX_BATCH;
+        // is there a batch on this *thread*?
+        // NB - if we are in a different invocation, but the same txn, we should reuse the Batch associated with
+        // the current txn and not the current thread
+        try {
+            System.out.println(this.getClass().getName() + ": current txn manager: " + tm.toString());
+            System.out.println(this.getClass().getName() + ": current txn is: " + tm.getTransaction());
+        }
+        catch(SystemException ex) {
+            System.out.println("Caught system exception when getting txn!");
+        }
+
         TransactionBatch batch = CURRENT_BATCH.get();
         if (batch != null) {
+            System.out.println(this.getClass().getName() + ": current batch exists: interposing");
+            // reuse the same batch - i.e. coalesce the operations in the same batch/txn
             return batch.interpose();
         }
         try {
+            System.out.println(this.getClass().getName() + ": no current batch exists: creating new batch");
+            // suspend the transaction associated with the current thread - shouldn't we record it?
+            // Transaction suspended = this.tm.suspend()
             this.tm.suspend();
+            // create a new batch
             this.tm.begin();
             Transaction tx = this.tm.getTransaction();
+            // remove the current batch when the txn commits or rolls back
+            // which depends on the relative number of calls to createBatch() and to close()
             tx.registerSynchronization(CURRENT_BATCH_REMOVER);
+            // this represents the newly created txn on the current thread
             batch = new InfinispanBatch(tx);
             CURRENT_BATCH.set(batch);
             return batch;
@@ -113,20 +135,41 @@ public class InfinispanBatcher implements Batcher<TransactionBatch> {
         }
     }
 
+    // when the Batch closes with no prior interposing, it will commit
+    // when the batch closes with prior interposing (a 3x), it will have to have more calls to close (3x)
+    // interposing only applies to nested invocations to DistributableCache *on the same thread*
+
     @Override
     public BatchContext resumeBatch(TransactionBatch batch) {
+        System.out.println(this.getClass().getName() + ": entering resumeBatch()");
+        // is there an existing batch on the current thread? Called previously.
         TransactionBatch existingBatch = CURRENT_BATCH.get();
+        // there is, but it is the same batch as the one we are asking to resume
         // Trivial case - nothing to suspend/resume
-        if (batch == existingBatch) return PASSIVE_BATCH_CONTEXT;
+        if (batch == existingBatch) {
+            System.out.println(this.getClass().getName() + ": existing batch same as resumed");
+            // passive BatchContext does nothing upon BatchContext.close()
+            return PASSIVE_BATCH_CONTEXT;
+        }
+        // there is not, or there is but it has no associated txn
+        // this can happen when a batch is created
         Transaction tx = (batch != null) ? batch.getTransaction() : null;
         // Non-tx case, just swap thread local
+        // in other words, there is no previous batch or there is a batch but no txn associated
         if ((batch == null) || (tx == null)) {
             CURRENT_BATCH.set(batch);
+            // this is what is done when BatchContext goes out of scope
+            // return to the original batch (wierd - for the scope of the BatchContext only?)
             return () -> {
                 CURRENT_BATCH.set(existingBatch);
             };
         }
         try {
+            System.out.println(this.getClass().getName() + ": existing batch not same as resumed - suspending current ");
+            // there is an existing batch on the same thread (e.g. we are in the second/third call of a nested call sequence)
+            // suspend that call sequence, resume the specified batch txn and set the current batch to the resumed batch
+            // thus, the new txn will be used until the BatchContext goes out of scope, upon which time the existing batch
+            // will be resumed
             if (existingBatch != null) {
                 Transaction existingTx = this.tm.suspend();
                 if (existingBatch.getTransaction() != existingTx) {
@@ -135,6 +178,9 @@ public class InfinispanBatcher implements Batcher<TransactionBatch> {
             }
             this.tm.resume(tx);
             CURRENT_BATCH.set(batch);
+            // this is what is done when BatchContext goes out of scope
+            // NOTE: this is done after operation for both release() and discard()
+            // suspend the resumed batch and resume the original existing batch (wierd)
             return () -> {
                 try {
                     this.tm.suspend();
@@ -157,14 +203,23 @@ public class InfinispanBatcher implements Batcher<TransactionBatch> {
         }
     }
 
+    // NOTE: the thread "stays the same" in that batch operations are thread-specific
+    // what changes is the transaction which collects/records work done on the thread
+    // so when we get a session on one thread, we can call discard on another thread and the
+    // work done in the discard will be recorded in the original txn
+    // after that operation is completed, we return to the (original) transaction
+
     @Override
     public TransactionBatch suspendBatch() {
+        System.out.println(this.getClass().getName() + ": entering suspendBatch()");
         if (this.tm == null) return null;
         TransactionBatch batch = CURRENT_BATCH.get();
         if (batch != null) {
+            System.out.println(this.getClass().getName() + ": current batch exists - suspending");
             try {
                 Transaction tx = this.tm.suspend();
                 if (batch.getTransaction() != tx) {
+                    // yes, they should be the same txn
                     throw new IllegalStateException();
                 }
             } catch (SystemException e) {

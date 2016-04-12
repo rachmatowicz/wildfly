@@ -57,33 +57,42 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
 
     @Override
     public Affinity getStrictAffinity() {
+        System.out.println(this.getClass().getName() + ": getStrictAffinity() - start");
         try (Batch batch = this.manager.getBatcher().createBatch()) {
-            return this.manager.getStrictAffinity();
+            Affinity affinity = this.manager.getStrictAffinity();
+            System.out.println(this.getClass().getName() + ": getStrictAffinity() - end");
+            return affinity;
         }
     }
 
     @Override
     public Affinity getWeakAffinity(K id) {
+        System.out.println(this.getClass().getName() + ": getWeakAffinity() - start");
         try (Batch batch = this.manager.getBatcher().createBatch()) {
-            return this.manager.getWeakAffinity(id);
+            Affinity affinity =  this.manager.getWeakAffinity(id);
+            System.out.println(this.getClass().getName() + ": getWeakAffinity() - end");
+            return affinity;
         }
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public K createIdentifier() {
+        System.out.println(this.getClass().getName() + ": createIdentifier() - start");
         K id = this.manager.getIdentifierFactory().createIdentifier();
         K group = (K) CURRENT_GROUP.get();
         if (group == null) {
             group = id;
             CURRENT_GROUP.set(group);
         }
+        System.out.println(this.getClass().getName() + ": createIdentifier() - end");
         return id;
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public V create() {
+        System.out.println(this.getClass().getName() + ": create() - start");
         boolean newGroup = CURRENT_GROUP.get() == null;
         try (Batch batch = this.manager.getBatcher().createBatch()) {
             try {
@@ -101,22 +110,27 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
             if (newGroup) {
                 CURRENT_GROUP.remove();
             }
+            System.out.println(this.getClass().getName() + ": create() - end");
         }
     }
 
     @Override
     public V get(K id) {
+        System.out.println(this.getClass().getName() + ": get(" + id + ") - start");
         // Batch is not closed here - it will be closed during release(...) or discard(...)
+        // not closed because the instance is saved in the value
         @SuppressWarnings("resource")
         Batch batch = this.manager.getBatcher().createBatch();
         try {
             Bean<K, V> bean = this.manager.findBean(id);
             if (bean == null) {
                 batch.close();
+                System.out.println(this.getClass().getName() + ": get() - end");
                 return null;
             }
             V result = bean.acquire();
             result.setCacheContext(batch);
+            System.out.println(this.getClass().getName() + ": get() - end");
             return result;
         } catch (RuntimeException | Error e) {
             batch.discard();
@@ -127,6 +141,7 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
 
     @Override
     public void release(V value) {
+        System.out.println(this.getClass().getName() + ": release() - start");
         try (BatchContext context = this.manager.getBatcher().resumeBatch(value.getCacheContext())) {
             try (Batch batch = value.getCacheContext()) {
                 try {
@@ -136,6 +151,7 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
                             bean.close();
                         }
                     }
+                    System.out.println(this.getClass().getName() + ": release() - end");
                 } catch (RuntimeException | Error e) {
                     batch.discard();
                     throw e;
@@ -146,12 +162,14 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
 
     @Override
     public void remove(K id) {
+        System.out.println(this.getClass().getName() + ": remove() - start");
         try (Batch batch = this.manager.getBatcher().createBatch()) {
             try {
                 Bean<K, V> bean = this.manager.findBean(id);
                 if (bean != null) {
                     bean.remove(this.listener);
                 }
+                System.out.println(this.getClass().getName() + ": remove() - end");
             } catch (RuntimeException | Error e) {
                 batch.discard();
                 throw e;
@@ -161,6 +179,7 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
 
     @Override
     public void discard(V value) {
+        System.out.println(this.getClass().getName() + ": discard() - start");
         try (BatchContext context = this.manager.getBatcher().resumeBatch(value.getCacheContext())) {
             try (Batch batch = value.getCacheContext()) {
                 try {
@@ -168,6 +187,7 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
                     if (bean != null) {
                         bean.remove(null);
                     }
+                    System.out.println(this.getClass().getName() + ": discard() - end");
                 } catch (RuntimeException | Error e) {
                     batch.discard();
                     throw e;
@@ -178,8 +198,11 @@ public class DistributableCache<K, V extends Identifiable<K> & Contextual<Batch>
 
     @Override
     public boolean contains(K id) {
+        System.out.println(this.getClass().getName() + ": contains() - start");
         try (Batch batch = this.manager.getBatcher().createBatch()) {
-            return this.manager.containsBean(id);
+            boolean result = this.manager.containsBean(id);
+            System.out.println(this.getClass().getName() + ": contains() - end");
+            return result ;
         }
     }
 

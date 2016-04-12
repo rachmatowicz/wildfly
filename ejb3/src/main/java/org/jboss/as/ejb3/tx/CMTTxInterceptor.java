@@ -88,8 +88,10 @@ public class CMTTxInterceptor implements Interceptor {
                 // This will happen if
                 // a) everything goes well
                 // b) app. exception was thrown
+                System.out.println(this.getClass().getName() + ": endTransaction() - committing ");
                 tm.commit();
             } else if (txStatus == Status.STATUS_MARKED_ROLLBACK) {
+                System.out.println(this.getClass().getName() + ": endTransaction() - rolling back ");
                 tm.rollback();
             } else if (txStatus == Status.STATUS_ROLLEDBACK || txStatus == Status.STATUS_ROLLING_BACK) {
                 // handle reaper canceled (rolled back) tx case (see WFLY-1346)
@@ -110,6 +112,7 @@ public class CMTTxInterceptor implements Interceptor {
                 //  Status.STATUS_COMMITTING
                 //  Status.STATUS_NO_TRANSACTION
                 //  Status.STATUS_COMMITTED
+                System.out.println(this.getClass().getName() + ": endTransaction() - suspending ");
                 tm.suspend();                       // clear current tx state and throw EJBException
                 throw EjbLogger.ROOT_LOGGER.transactionInUnexpectedState(tx, statusAsString(txStatus));
             }
@@ -228,6 +231,7 @@ public class CMTTxInterceptor implements Interceptor {
             final MethodIntf methodIntf = MethodIntfHelper.of(invocation);
             final TransactionAttributeType attr = component.getTransactionAttributeType(methodIntf, invocation.getMethod());
             final int timeoutInSeconds = component.getTransactionTimeout(methodIntf, invocation.getMethod());
+            System.out.println(this.getClass().getName() + ": processInvocation: txn manager instance : " + tm.toString());
             switch (attr) {
                 case MANDATORY:
                     return mandatory(invocation, component);
@@ -269,8 +273,10 @@ public class CMTTxInterceptor implements Interceptor {
 
     protected Object invokeInOurTx(InterceptorContext invocation, TransactionManager tm, final EJBComponent component) throws Exception {
         for (int i = 0; i < MAX_RETRIES; i++) {
+            System.out.println(this.getClass().getName() + ": invokeInOurTx() - create transaction from txn manager: ");
             tm.begin();
             Transaction tx = tm.getTransaction();
+            System.out.println(this.getClass().getName() + ": got transaction after begin: tx " + tx);
             try {
                 return invocation.proceed();
             } catch (Throwable t) {
@@ -326,6 +332,7 @@ public class CMTTxInterceptor implements Interceptor {
         if (tx == null) {
             return invokeInOurTx(invocation, tm, component);
         } else {
+            System.out.println(this.getClass().getName() + ": got transaction from txn manager: status = " + tx.getStatus());
             return invokeInCallerTx(invocation, tx, component);
         }
     }

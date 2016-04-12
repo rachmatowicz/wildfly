@@ -53,21 +53,27 @@ public class InfinispanBatch implements TransactionBatch {
     @Override
     public TransactionBatch interpose() {
         this.count.incrementAndGet();
+        System.out.println(this.getClass().getName() + ": interposing batch: count = " + this.count.get());
         return this;
     }
 
     @Override
     public void discard() {
+        System.out.println(this.getClass().getName() + ": discarding batch");
         this.rollback = true;
     }
 
     @Override
     public void close() {
+        // This is what is done when Batch goes out of scope
+        System.out.println(this.getClass().getName() + ": closing batch - count = " + this.count.get());
         if (this.count.getAndDecrement() == 0) {
             try {
                 if (this.rollback) {
+                    System.out.println(this.getClass().getName() + ": closing batch - rollback");
                     this.tx.rollback();
                 } else {
+                    System.out.println(this.getClass().getName() + ": closing batch - commit");
                     this.tx.commit();
                 }
             } catch (RollbackException | HeuristicMixedException | HeuristicRollbackException | SystemException e) {

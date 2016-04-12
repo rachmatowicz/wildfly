@@ -240,6 +240,7 @@ public class InfinispanBeanManager<I, T> implements BeanManager<I, T, Transactio
     @Override
     public Bean<I, T> findBean(I id) {
         InfinispanEjbLogger.ROOT_LOGGER.tracef("Locating bean %s", id);
+        System.out.println(this.getClass().getName() + ": locating bean " + id);
         BeanEntry<I> entry = this.beanFactory.findValue(id);
         Bean<I, T> bean = (entry != null) ? this.beanFactory.createBean(id, entry) : null;
         if (bean == null) {
