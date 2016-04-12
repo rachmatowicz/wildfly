@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.ejb.EJBException;
 import javax.naming.NamingException;
+import javax.transaction.UserTransaction;
 import javax.validation.constraints.AssertTrue;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -57,6 +58,7 @@ import org.jboss.as.test.clustering.ejb.EJBDirectory;
 import org.jboss.as.test.clustering.ejb.RemoteEJBDirectory;
 import org.jboss.as.test.shared.TimeoutUtil;
 import org.jboss.ejb.client.ContextSelector;
+import org.jboss.ejb.client.EJBClient;
 import org.jboss.ejb.client.EJBClientContext;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
@@ -107,12 +109,14 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
 
     @InSequence(1)
     @Test
+    @Ignore
     public void testStatelessFailover() throws Exception {
         this.testStatelessFailover(CLIENT_PROPERTIES, StatelessIncrementorBean.class);
     }
 
     @InSequence(4)
     @Test
+    @Ignore
     public void testSecureStatelessFailover() throws Exception {
         this.testStatelessFailover(SECURE_CLIENT_PROPERTIES, SecureStatelessIncrementorBean.class);
     }
@@ -374,6 +378,7 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
      */
     @InSequence(5)
     @Test
+    @Ignore
     public void testClientException() throws Exception {
         ContextSelector<EJBClientContext> selector = EJBClientContextSelector.setup(CLIENT_PROPERTIES);
         try (EJBDirectory context = new RemoteEJBDirectory(MODULE_NAME)) {
@@ -389,6 +394,85 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
         }
         fail("Expected EJBException but didn't catch it");
     }
+
+    @InSequence(6)
+    @Test
+    public void testStatefulFailoverWithUserTransaction() throws Exception {
+        System.out.println("Starting testStatefulFailoverWithUserTransaction");
+        ContextSelector<EJBClientContext> selector = EJBClientContextSelector.setup(CLIENT_PROPERTIES);
+        try (EJBDirectory context = new RemoteEJBDirectory(MODULE_NAME)) {
+            Incrementor bean = context.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
+
+            Result<Integer> result = bean.increment();
+            String target = result.getNode();
+            int count = 1;
+            System.out.println("Established weak affinity to " + target);
+
+            Assert.assertEquals(count++, result.getValue().intValue());
+
+            // check UserTransaction in absence of undeploy
+            final UserTransaction userTransaction1 = EJBClient.getUserTransaction(target);
+            try {
+                userTransaction1.begin();
+
+                // first invocation
+                System.out.println("First invocation in userTransaction1 on target " + target);
+                result = bean.increment();
+                Assert.assertEquals(count++, result.getValue().intValue());
+                Assert.assertEquals("fred", target, result.getNode());
+
+                // second invocation
+                System.out.println("Second invocation in userTransaction1 on target " + target);
+                result = bean.increment();
+                Assert.assertEquals(count++, result.getValue().intValue());
+                Assert.assertEquals("fred", target, result.getNode());
+
+                System.out.println("Commit userTransaction1 on target " + target);
+                userTransaction1.commit();
+
+            }
+            catch(Exception e) {
+                System.out.println("Exception occurred in userTransaction1: " + e.getMessage());
+            }
+
+            /*
+            // check UserTransaction in presence of undeploy
+            final UserTransaction userTransaction2 = EJBClient.getUserTransaction(target);
+            try {
+                userTransaction2.begin();
+
+                // first invocation
+                System.out.println("First invocation in userTransaction2 on target " + target);
+                result = bean.increment();
+                Assert.assertEquals(count++, result.getValue().intValue());
+                Assert.assertEquals("fred", target, result.getNode());
+
+                undeploy(this.findDeployment(target));
+
+                // second invocation
+                System.out.println("Second invocation in userTransaction2 on target " + target);
+                result = bean.increment();
+                Assert.assertEquals(count++, result.getValue().intValue());
+                Assert.assertEquals("fred", target, result.getNode());
+
+                System.out.println("Commit userTransaction2 on target " + target);
+                userTransaction2.commit();
+
+                // redeploy to restore setup
+                deploy(this.findDeployment(target));
+
+            }
+            catch(Exception e) {
+                System.out.println("Exception occurred in userTransaction2: " + e.getMessage());
+            }
+            */
+
+            System.out.println("Ending testStatefulFailoverWithUserTransaction");
+        } finally {
+            EJBClientContext.setSelector(selector);
+        }
+    }
+
 
     private class IncrementTask implements Runnable {
         private final Incrementor bean;
