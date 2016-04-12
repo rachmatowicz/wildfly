@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.ejb.EJBException;
 import javax.naming.NamingException;
+import javax.transaction.UserTransaction;
 import javax.validation.constraints.AssertTrue;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -57,6 +58,7 @@ import org.jboss.as.test.clustering.ejb.EJBDirectory;
 import org.jboss.as.test.clustering.ejb.RemoteEJBDirectory;
 import org.jboss.as.test.shared.TimeoutUtil;
 import org.jboss.ejb.client.ContextSelector;
+import org.jboss.ejb.client.EJBClient;
 import org.jboss.ejb.client.EJBClientContext;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
@@ -388,6 +390,86 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
             EJBClientContext.setSelector(selector);
         }
         fail("Expected EJBException but didn't catch it");
+    }
+
+    /**
+     * Tests that EJBClient invocations wrapped by UserTransactions work as expected:
+     * - we may perform multiple invocations to beans on the same node
+     * - fail-over is disabled for UserTransactions
+     *
+     * @throws Exception
+     */
+    @InSequence(6)
+    @Test
+    public void testStatefulFailoverWithUserTransaction() throws Exception {
+        ContextSelector<EJBClientContext> selector = EJBClientContextSelector.setup(CLIENT_PROPERTIES);
+        try (EJBDirectory context = new RemoteEJBDirectory(MODULE_NAME)) {
+            Incrementor bean = context.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
+
+            Result<Integer> result = bean.increment();
+            String target = result.getNode();
+            int count = 1;
+            System.out.println("Established weak affinity to " + target);
+
+            Assert.assertEquals(count++, result.getValue().intValue());
+
+            // check UserTransaction in absence of undeploy
+            final UserTransaction userTransaction1 = EJBClient.getUserTransaction(target);
+            try {
+                userTransaction1.begin();
+
+                // first invocation
+                System.out.println("First invocation in userTransaction1 on target " + target);
+                result = bean.increment();
+                Assert.assertEquals(count++, result.getValue().intValue());
+                Assert.assertEquals("fred", target, result.getNode());
+
+                // second invocation
+                System.out.println("Second invocation in userTransaction1 on target " + target);
+                result = bean.increment();
+                Assert.assertEquals(count++, result.getValue().intValue());
+                Assert.assertEquals("fred", target, result.getNode());
+
+                System.out.println("Commit userTransaction1 on target " + target);
+                userTransaction1.commit();
+            }
+            catch(Exception e) {
+                Assert.fail("Unexpected exception during invocation processing of UserTransaction1: " + e.getMessage());
+            }
+
+            // check UserTransaction in presence of undeploy
+            final UserTransaction userTransaction2 = EJBClient.getUserTransaction(target);
+            try {
+                userTransaction2.begin();
+
+                // first invocation
+                System.out.println("First invocation in userTransaction2 on target " + target);
+                result = bean.increment();
+                Assert.assertEquals(count++, result.getValue().intValue());
+                Assert.assertEquals("fred", target, result.getNode());
+
+                // undeploy the bean from the node where the first invocation was made
+                undeploy(this.findDeployment(target));
+
+                // second invocation
+                System.out.println("Second invocation in userTransaction2 on target " + target);
+                result = bean.increment();
+
+                // expecting exception - we should not get here
+                Assert.fail("Exception was expected: UserTransaction should not fail-over");
+            }
+            catch(IllegalStateException ise) {
+                System.out.println("Got expected exception in userTransaction2: " + ise.getMessage());
+
+                // redeploy to restore setup
+                deploy(this.findDeployment(target));
+            }
+            catch(Exception e) {
+                Assert.fail("IllegalStateException was expected: instead got " + e.getClass().getName());
+            }
+        } finally {
+            EJBClientContext.setSelector(selector);
+        }
     }
 
     private class IncrementTask implements Runnable {
