@@ -125,19 +125,16 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                 return context.proceed();
 
             } finally {
-                // if the current call did *not* register a tx SessionSynchronization, then we have to explicitly mark the
-                // SFSB instance as "no longer in use". If it registered a tx SessionSynchronization, then releasing the lock is
-                // taken care off by a tx synchronization callbacks.
-                if (!wasTxSyncRegistered && !instance.isSynchronizationRegistered()) {
-                    releaseInstance(instance);
-                } else if (!wasTxSyncRegistered) {
-                    //if we don't release the lock here then it will be acquired multiple times
-                    //and only released once
+                // we need to release the SFSB instance at the end of every invocation to decrease the usage count
+                // see WFLY-6498
+                if (!instance.isDiscarded()) {
+                    instance.getComponent().getCache().release(instance);
+                }
+
+                // if no transaction sync is registered on an invocation, we must also release the instance lock
+                if (!wasTxSyncRegistered) {
+                    //if we don't release the lock here then it will be acquired multiple times and only released once
                     releaseLock(instance);
-                    //we also call the cache release to decrease the usage count
-                    if (!instance.isDiscarded()) {
-                        instance.getComponent().getCache().release(instance);
-                    }
                 }
             }
         }
@@ -156,22 +153,15 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
     }
 
     /**
-     * Releases the passed {@link StatefulSessionComponentInstance} i.e. marks it as no longer in use. After releasing the
-     * instance, this method releases the lock, held by this thread, on the stateful component instance.
+     * Cleanup at synchronization time. Sets the synchonization registered flag back to false and
+     * releases the instance lock, held by this thread, on the stateful component instance.
      *
      * @param instance The stateful component instance
      */
-    void releaseInstance(final StatefulSessionComponentInstance instance) {
-        try {
-            if (!instance.isDiscarded()) {
-                // mark the SFSB instance as no longer in use
-                instance.getComponent().getCache().release(instance);
-            }
-        } finally {
-            instance.setSynchronizationRegistered(false);
-            // release the lock on the SFSB instance
-            this.releaseLock(instance);
-        }
+    void releaseInstanceLock(final StatefulSessionComponentInstance instance) {
+        instance.setSynchronizationRegistered(false);
+        // release the lock on the SFSB instance
+        this.releaseLock(instance);
     }
 
     /**
