@@ -126,6 +126,7 @@ public class NamingStatefulSessionCreationTestCase extends ClusterAbstractTestCa
                     validateStatefulSessionProxy(bean,new ClusterAffinity("ejb"), new NodeAffinity("node-1")));
 
         } catch(Exception e) {
+            System.out.println("BAD! Got exception: e = " + e.getMessage());
             Assert.fail();
         }
     }
