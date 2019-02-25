@@ -249,17 +249,16 @@ final class AssociationImpl implements Association, AutoCloseable {
         Affinity legacyAffinity = null;
         Affinity weakAffinity = null;
         Affinity strongAffinity = null;
-        Affinity clusterAffinity = getClusterAffinity();
 
         if (ejbLocator.isStateful() && componentView.getComponent() instanceof StatefulSessionComponent) {
             final StatefulSessionComponent statefulSessionComponent = (StatefulSessionComponent) componentView.getComponent();
             strongAffinity = getStrongAffinity(statefulSessionComponent);
             weakAffinity = legacyAffinity = getWeakAffinity(statefulSessionComponent, ejbLocator.asStateful());
         } else if (componentView.getComponent() instanceof StatelessSessionComponent) {
-            // V3 and less used cluster affinity as a weak affinity for SLSBs (used to update weak affinity in the invocation context on invocation return)
-            legacyAffinity = clusterAffinity;
-            // for SLSB, if they touch a cluster, assign them ClusterAffinity (to retain compatability with what was going on before)
-            strongAffinity = clusterAffinity;
+            // Stateless invocations no not require strong affinity, only weak affinity to nodes within the same cluster, if present.
+            // However, since V3, the EJB client does not support weak affinity updates referencing a cluster (and even then, only via Affinity.WEAK_AFFINITY_CONTEXT_KEY), only a node.
+            // Until this is corrected, we need to use the strong affinity instead.
+            strongAffinity = legacyAffinity = this.getStatelessAffinity();
         }
 
         // cause the affinity values to get sent back to the client
@@ -614,7 +613,7 @@ final class AssociationImpl implements Association, AutoCloseable {
         return statefulSessionComponent.getCache().getWeakAffinity(sessionID);
     }
 
-    private Affinity getClusterAffinity() {
+    private Affinity getStatelessAffinity() {
         Registry<String, List<ClientMapping>> registry = this.clientMappingRegistry;
         Group group = registry != null ? registry.getGroup() : null;
 
