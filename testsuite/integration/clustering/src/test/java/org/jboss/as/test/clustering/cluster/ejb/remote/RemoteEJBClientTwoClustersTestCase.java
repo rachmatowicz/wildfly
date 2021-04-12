@@ -76,7 +76,6 @@ public class RemoteEJBClientTwoClustersTestCase extends AbstractClusteringTestCa
     private static final Logger logger = Logger.getLogger(RemoteEJBClientTwoClustersTestCase.class);
     private static final String CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME = "wildfly.config.url";
     private static final String CONFIGURATION_FILE = "two-clusters-wildfly-config.xml";
-    // private static String originalConfigurationFilePropertyName ;
 
     private static final String MODULE_NAME = RemoteEJBClientTwoClustersTestCase.class.getSimpleName();
     private static final Class STATEFUL_BEAN_CLASS = StatefulIncrementorBean.class;
@@ -137,13 +136,12 @@ public class RemoteEJBClientTwoClustersTestCase extends AbstractClusteringTestCa
         ClassLoader cl = RemoteEJBClientTwoClustersTestCase.class.getClassLoader();
         URL resource = cl != null ? cl.getResource(CONFIGURATION_FILE) : ClassLoader.getSystemResource(CONFIGURATION_FILE);
         File file = new File(resource.toURI());
-        originalConfigurationFilePropertyName = System.setProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME,file.getAbsolutePath());
+        System.setProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME,file.getAbsolutePath());
     }
 
     @AfterClass
     public static void afterClass() throws Exception {
         System.clearProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME);
-        // System.setProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME, originalConfigurationFilePropertyName);
     }
 
     /**
