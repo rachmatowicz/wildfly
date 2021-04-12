@@ -137,12 +137,13 @@ public class RemoteEJBClientTwoClustersTestCase extends AbstractClusteringTestCa
         ClassLoader cl = RemoteEJBClientTwoClustersTestCase.class.getClassLoader();
         URL resource = cl != null ? cl.getResource(CONFIGURATION_FILE) : ClassLoader.getSystemResource(CONFIGURATION_FILE);
         File file = new File(resource.toURI());
-        System.setProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME,file.getAbsolutePath());
+        originalConfigurationFilePropertyName = System.setProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME,file.getAbsolutePath());
     }
 
     @AfterClass
     public static void afterClass() throws Exception {
-        System.setProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME,"");
+        // System.clearProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME);
+        System.setProperty(CONFIGURATION_FILE_SYSTEM_PROPERTY_NAME, originalConfigurationFilePropertyName);
     }
 
     /**
