@@ -22,6 +22,7 @@
 package org.jboss.as.test.clustering.cluster.ejb.remote;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 import java.util.PropertyPermission;
 import javax.naming.Context;
@@ -61,11 +62,19 @@ import org.junit.runner.RunWith;
 
 import org.wildfly.common.function.ExceptionSupplier;
 
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.CHILD_TYPE;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.COMPOSITE;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.INCLUDE_RUNTIME;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OUTCOME;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.READ_CHILDREN_NAMES_OPERATION;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RECURSIVE;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RESULT;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.STEPS;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUCCESS;
+import static org.jboss.as.test.integration.management.util.ModelUtil.modelNodeAsStingList;
 
 /**
  * A test case for the key features of EJB/HTTP when used in conjunction with a load balancer,
@@ -96,6 +105,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
     private static final PathAddress REQUEST_LOGGING_FILETR_REF = UNDERTOW.append("server","default-server").append("host","default-host").append("filter-ref","request-logging-filter");
     private static final PathAddress DEFAULT_HTTP_LISTENER = UNDERTOW.append("server","default-server").append("http-listener","default");
     private static final PathAddress LOAD_BALANCER = UNDERTOW.append("configuration","filter").append("mod-cluster","load-balancer");
+    private static final PathAddress RUNTIME_LOAD_BALANCER = LOAD_BALANCER.append("balancer","mycluster");
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
@@ -225,11 +235,39 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         return props ;
     }
 
-    private void waitForProxyRegistration() {
-        try {
-            Thread.sleep(5 * 1000);
-        } catch (InterruptedException e) {
-            System.out.println("Thread.sleep() was interrupted");
+    private void waitForProxyRegistration() throws Exception {
+        final String address = TestSuiteEnvironment.getServerAddress();
+        final int port = TestSuiteEnvironment.getServerPort();
+        final ModelControllerClient client = TestSuiteEnvironment.getModelControllerClient(null, address, port + LB_OFFSET);
+
+        // /subsystem=undertow/configuration=filter/mod-cluster=load-balancer/balancer=mycluster:read-resource(include-runtime)
+        ModelNode readRegisteredWorkersOperation = Util.createOperation(READ_CHILDREN_NAMES_OPERATION, RUNTIME_LOAD_BALANCER);
+        readRegisteredWorkersOperation.get(CHILD_TYPE).set("node");
+        readRegisteredWorkersOperation.get(RECURSIVE).set("true");
+        readRegisteredWorkersOperation.get(INCLUDE_RUNTIME).set("true");
+
+        log.info("Waiting for backend server registration to complete");
+        // wait until we see two worker nodes on the load balancer
+        long start = System.currentTimeMillis();
+        // the result is either OUTCOME="failed" + FAILURE_DESCRIPTION or OUTCOME="success" + RESULT
+        ModelNode result = null;
+        boolean allWorkersRegistered = false;
+        while (System.currentTimeMillis() - start < STATUS_REFRESH_TIMEOUT) {
+            result = client.execute(readRegisteredWorkersOperation);
+            if (result.get(OUTCOME).asString().equals(SUCCESS)) {
+               // log.info("result = " + result.toString());
+                List<String> registeredWorkersList = modelNodeAsStingList(result.get(RESULT));
+                if (registeredWorkersList.size() == 2) {
+                    allWorkersRegistered = true;
+                    log.info("registeredWorkersList = " + registeredWorkersList);
+                    break;
+                }
+            }
+            Thread.sleep(1000);
+        }
+
+        if (!allWorkersRegistered) {
+            throw new RuntimeException("Test cannot proceed as all backend servers were not registered with the load balancer");
         }
     }
 
