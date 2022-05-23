@@ -21,16 +21,25 @@
  */
 package org.jboss.as.test.clustering.cluster.ejb.remote;
 
+import java.net.URL;
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.PropertyPermission;
-import javax.naming.Context;
 
+import javax.naming.Context;
+import javax.servlet.http.HttpServletResponse;
+
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.utils.HttpClientUtils;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
+import org.jboss.arquillian.junit.InSequence;
 import org.jboss.as.arquillian.api.ServerSetup;
 import org.jboss.as.controller.client.ModelControllerClient;
 import org.jboss.as.controller.PathAddress;
@@ -41,8 +50,10 @@ import org.jboss.as.test.clustering.cluster.ejb.remote.bean.IncrementorBean;
 import org.jboss.as.test.clustering.cluster.ejb.remote.bean.Result;
 import org.jboss.as.test.clustering.cluster.ejb.remote.bean.StatefulIncrementorBean;
 import org.jboss.as.test.clustering.cluster.ejb.remote.bean.StatelessIncrementorBean;
+import org.jboss.as.test.clustering.cluster.ejb.remote.servlet.WhichNodeServlet;
 import org.jboss.as.test.clustering.ejb.EJBDirectory;
 import org.jboss.as.test.clustering.ejb.RemoteEJBDirectory;
+import org.jboss.as.test.http.util.TestHttpClientUtils;
 import org.jboss.as.test.integration.security.common.Utils;
 import org.jboss.as.test.shared.CLIServerSetupTask;
 import org.jboss.as.test.shared.ServerReload;
@@ -54,7 +65,9 @@ import org.jboss.ejb.client.EJBClient;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
-// import org.junit.Assert;
+import org.jboss.shrinkwrap.api.spec.WebArchive;
+import org.junit.Assert;
+// import org.junit.Ignore;
 import org.junit.Before;
 import org.junit.After;
 import org.junit.Test;
@@ -119,6 +132,18 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         return createDeployment();
     }
 
+    @Deployment(name = DEPLOYMENT_3, managed = false, testable = false)
+    @TargetsContainer(NODE_1)
+    public static Archive<?> createLoadBalancerCheck1() {
+        return createLoadBalancerCheckDeployment();
+    }
+
+    @Deployment(name = DEPLOYMENT_4, managed = false, testable = false)
+    @TargetsContainer(NODE_2)
+    public static Archive<?> createLoadBalancerCheck2() {
+        return createLoadBalancerCheckDeployment();
+    }
+
     private static Archive<?> createDeployment() {
         return ShrinkWrap.create(JavaArchive.class, DEPLOYMENT_NAME)
                 .addPackage(EJBDirectory.class.getPackage())
@@ -127,8 +152,14 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
                 ;
     }
 
+    private static Archive<?> createLoadBalancerCheckDeployment() {
+        return ShrinkWrap.create(WebArchive.class, "LoadBalancerCheck" + ".war")
+                .addClasses(WhichNodeServlet.class)
+                .setWebXML(WhichNodeServlet.class.getPackage(), "web.xml");
+    }
+
     public EJBOverHTTPTestCase() {
-        super(new String[] { NODE_1, NODE_2, LOAD_BALANCER_1 }, new String[]{DEPLOYMENT_1, DEPLOYMENT_2});
+        super(new String[] { NODE_1, NODE_2, LOAD_BALANCER_1 }, new String[]{ DEPLOYMENT_1, DEPLOYMENT_2, DEPLOYMENT_3, DEPLOYMENT_4 });
     }
 
     @Before
@@ -144,19 +175,79 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
     }
 
     /*
-     * Run a test where the client communicates with a load balancer via JNDI/HTTP and EJB/HTTP.
+     * Check to see that the load balancer, so configured, will balance HTTP servlet requests correctly.
      */
+    @InSequence(1)
     @Test
-    public void testEJBClientUsingHTTPProtocol() throws Exception {
-        log.infof(MODULE_NAME+ " : testing without failover with client using HTTP");
+    public void testLoadBalancer() throws Exception {
+        log.infof(MODULE_NAME+ " : testLoadBalancer: starting test");
         waitForProxyRegistration();
 
-        // only http works at the moment (not https)
-        testSLSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
+        URI uri = WhichNodeServlet.createURI(new URL("http", "localhost", 8580, "/LoadBalancerCheck/"));
+        log.infof("Sending invovation to %s", uri.toString());
 
-        // only http works at the moment (not https)
+        try (CloseableHttpClient client = TestHttpClientUtils.promiscuousCookieHttpClient()) {
+            HttpResponse response = client.execute(new HttpGet(uri));
+            try {
+                Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
+                log.infof("first HTTP request went to %s", response.getFirstHeader("nodename").getValue());
+            } finally {
+                HttpClientUtils.closeQuietly(response);
+            }
+
+            response = client.execute(new HttpGet(uri));
+            try {
+                Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
+                log.infof("second HTTP request went to %s", response.getFirstHeader("nodename").getValue());
+            } finally {
+                HttpClientUtils.closeQuietly(response);
+            }
+        }
+    }
+
+    @InSequence(2)
+    @Test
+    public void testSLSBWithoutFailover() throws Exception {
+        waitForProxyRegistration();
+
+        // check SLSB load balance
+        testSLSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
+    }
+
+    @InSequence(3)
+    @Test
+    public void testSFSBWithoutFailover() throws Exception {
+        waitForProxyRegistration();
+
+        // check SFSB failover for a single SFSB
         testSFSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
 
+        // check SFSB and SLSB do not interfere
+        testSFSBAndSLSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
+
+        // check multiple SFSB sessions are created on different nodes
+        testMultipleSFSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
+    }
+
+    @InSequence(4)
+    @Test
+    public void testSFSBAndSLSBWithoutFailover() throws Exception {
+        waitForProxyRegistration();
+
+        // check SFSB and SLSB do not interfere
+        testSFSBAndSLSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
+
+        // check multiple SFSB sessions are created on different nodes
+        testMultipleSFSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
+    }
+
+    @InSequence(5)
+    @Test
+    public void testMultipleSFSBWithoutFailover() throws Exception {
+        waitForProxyRegistration();
+
+        // check multiple SFSB sessions are created on different nodes
+        testMultipleSFSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
     }
 
     /*
@@ -166,50 +257,114 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
      */
     public void testSLSBWithoutFailover(ExceptionSupplier<EJBDirectory, Exception> directoryProvider) throws Exception {
 
+        log.infof(MODULE_NAME+ " : testSLSBWithoutFailover: starting test");
         try (EJBDirectory directory = directoryProvider.get()) {
-            Incrementor bean = directory.lookupStateless(StatelessIncrementorBean.class, Incrementor.class);
+            Incrementor slsb = directory.lookupStateless(StatelessIncrementorBean.class, Incrementor.class);
+            logAffinityForBean(slsb, "testSLSBWithoutFailover");
 
-            Affinity strongAffinity = EJBClient.getStrongAffinity(bean);
-            Affinity weakAffinity = EJBClient.getWeakAffinity(bean);
-            log.info("Calling testSLSBWithoutFailover: strong affinity = " + strongAffinity + ", weak affinity = " + weakAffinity);
-
-            Result<Integer> result = bean.increment();
-            log.info("Called SLSBWithoutFailover: backend node = " + result.getNode());
+            Result<Integer> result = slsb.increment();
+            log.info("Called SLSBWithoutFailover: SLSB backend node = " + result.getNode());
 
             int count = 1;
             for (int i = 0; i < COUNT; ++i) {
-                result = bean.increment();
-                log.info("Called SLSBWithoutFailover: backend node = " + result.getNode());
+                result = slsb.increment();
+                log.info("Called SLSBWithoutFailover: SLSB backend node = " + result.getNode());
             }
         }
     }
 
     /*
      * A test which checks SFSB behaviour of EJB client with EJB/HTTP in the absence of failover.
-     * The key behaviour to validate: stickiness of EHB sessions to the nodes that own them.
+     * The key behaviour to validate: stickiness of EJB sessions to the nodes that own them.
      * Proxies are obtained via JNDI/HTTP and invocations are made using EJB/HTTP.
      */
     public void testSFSBWithoutFailover(ExceptionSupplier<EJBDirectory, Exception> directoryProvider) throws Exception {
 
+        log.infof(MODULE_NAME+ " : testSFSBWithoutFailover: starting test");
         try (EJBDirectory directory = directoryProvider.get()) {
             // this single statement creates a session on the server
-            Incrementor bean = directory.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
+            Incrementor sfsb = directory.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
+            logAffinityForBean(sfsb, "testSFSBWithoutFailover");
 
-            Affinity strongAffinity = EJBClient.getStrongAffinity(bean);
-            Affinity weakAffinity = EJBClient.getWeakAffinity(bean);
-            log.info("Calling testSFSBWithoutFailover: strong affinity = " + strongAffinity + ", weak affinity = " + weakAffinity);
-
-            Result<Integer> result = bean.increment();
-            log.infof("Called SFSBWithoutFailover: value = %s, backend node = %s", result.getValue().intValue(), result.getNode());
+            Result<Integer> result = sfsb.increment();
+            log.infof("Called SFSBWithoutFailover: SFSB value = %s, backend node = %s", result.getValue().intValue(), result.getNode());
 
             int count = 1;
             for (int i = 0; i < COUNT; ++i) {
-                result = bean.increment();
-                log.infof("Called SFSBWithoutFailover: value = %s, backend node = %s", result.getValue().intValue(), result.getNode());
+                result = sfsb.increment();
+                log.infof("Called SFSBWithoutFailover: SFSB value = %s, backend node = %s", result.getValue().intValue(), result.getNode());
             }
         }
     }
 
+    /*
+     * A test which checks SFSB and SLSB behaviour of EJB client with EJB/HTTP in the absence of failover.
+     * The key behaviour to validate: stickiness of EJB SFSB sessions to the nodes that own them, while at the
+     * same time allowing SLSB EJBs to balance across nodes.
+     * Proxies are obtained via JNDI/HTTP and invocations are made using EJB/HTTP.
+     */
+    public void testSFSBAndSLSBWithoutFailover(ExceptionSupplier<EJBDirectory, Exception> directoryProvider) throws Exception {
+
+        log.infof(MODULE_NAME+ " : testSLSBWAndSLSBithoutFailover: starting test");
+        try (EJBDirectory directory = directoryProvider.get()) {
+            // this single statement creates a session on the server
+            Incrementor sfsb = directory.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
+            Incrementor slsb = directory.lookupStateless(StatelessIncrementorBean.class, Incrementor.class);
+
+            Result<Integer> sfsbResult = sfsb.increment();
+            log.infof("Called SFSBAndSLSBWithoutFailover: SFSB value = %s, backend node = %s", sfsbResult.getValue().intValue(), sfsbResult.getNode());
+
+            Result<Integer> slsbResult = slsb.increment();
+            log.infof("Called SFSBAndSLSBWithoutFailover: SLSB backend node = %s", slsbResult.getNode());
+
+            int count = 1;
+            for (int i = 0; i < COUNT; ++i) {
+                sfsbResult = sfsb.increment();
+                log.infof("Called SFSBAndSLSBWithoutFailover: SFSB value = %s, backend node = %s", sfsbResult.getValue().intValue(), sfsbResult.getNode());
+
+                slsbResult = slsb.increment();
+                log.infof("Called SFSBAndSLSBWithoutFailover: SLSB backend node = %s", slsbResult.getNode());
+            }
+        }
+    }
+
+    /*
+     * A test which checks SFSB behaviour of EJB client with EJB/HTTP in the absence of failover.
+     * The key behaviour to validate: multiple SFSB sessions are distributed evenly across the cluster
+     * Proxies are obtained via JNDI/HTTP and invocations are made using EJB/HTTP.
+     */
+    public void testMultipleSFSBWithoutFailover(ExceptionSupplier<EJBDirectory, Exception> directoryProvider) throws Exception {
+
+        log.infof(MODULE_NAME+ " : testMultipleSFSBWithoutFailover: starting test");
+        try (EJBDirectory directory = directoryProvider.get()) {
+            // this single statement creates a session on the server
+            Incrementor sfsb1 = directory.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
+            Incrementor sfsb2 = directory.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
+            logAffinityForBean(sfsb1, "testSFSBWithoutFailover");
+            logAffinityForBean(sfsb2, "testSFSBWithoutFailover");
+
+            Result<Integer> result1 = sfsb1.increment();
+            log.infof("Called MultipleSFSBWithoutFailover: SFSB value = %s, backend node = %s", result1.getValue().intValue(), result1.getNode());
+
+            Result<Integer> result2 = sfsb2.increment();
+            log.infof("Called MultipleSFSBWithoutFailover: SFSB value = %s, backend node = %s", result2.getValue().intValue(), result2.getNode());
+
+            int count = 1;
+            for (int i = 0; i < COUNT; ++i) {
+                result1 = sfsb1.increment();
+                log.infof("Called MultipleSFSBWithoutFailover: SFSB value = %s, backend node = %s", result1.getValue().intValue(), result1.getNode());
+
+                result2 = sfsb2.increment();
+                log.infof("Called MultipleSFSBWithoutFailover: SFSB value = %s, backend node = %s", result2.getValue().intValue(), result2.getNode());
+            }
+        }
+    }
+
+    private void logAffinityForBean(Object bean, String message) {
+        Affinity strongAffinity = EJBClient.getStrongAffinity(bean);
+        Affinity weakAffinity = EJBClient.getWeakAffinity(bean);
+        log.infof("%s: SFSB affinity for bean %s, strong affinity = %s, weak affinity = %s", message, bean, strongAffinity, weakAffinity);
+    }
 
     /*
      * Set up JNDI properties to support HTTP based Jakarta Enterprise Beans client invocations via EJB/HTTP
@@ -235,10 +390,12 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         return props ;
     }
 
+    /*
+     * Periodically check rhe load balancer for registered backend servers.
+     * Return when both expected backend servers are registered.
+     */
     private void waitForProxyRegistration() throws Exception {
-        final String address = TestSuiteEnvironment.getServerAddress();
-        final int port = TestSuiteEnvironment.getServerPort();
-        final ModelControllerClient client = TestSuiteEnvironment.getModelControllerClient(null, address, port + LB_OFFSET);
+        final ModelControllerClient client = getModelControllerClient();
 
         // /subsystem=undertow/configuration=filter/mod-cluster=load-balancer/balancer=mycluster:read-resource(include-runtime)
         ModelNode readRegisteredWorkersOperation = Util.createOperation(READ_CHILDREN_NAMES_OPERATION, RUNTIME_LOAD_BALANCER);
@@ -275,9 +432,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
      * Install a request dumper into Undertow to see which requests are arriving at the load balancer     *
      */
     private void installRequestDumperIntoLoadBalancer() throws Exception {
-        final String address = TestSuiteEnvironment.getServerAddress();
-        final int port = TestSuiteEnvironment.getServerPort();
-        final ModelControllerClient client = TestSuiteEnvironment.getModelControllerClient(null, address, port + LB_OFFSET);
+        final ModelControllerClient client = getModelControllerClient();
 
         final ModelNode compositeOp = new ModelNode();
         compositeOp.get(OP).set(COMPOSITE);
@@ -310,9 +465,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
      * Install a request dumper into Undertow to see which requests are arriving at the load balancer
      */
     private void removeRequestDumperFromLoadBalancer() throws Exception {
-        final String address = TestSuiteEnvironment.getServerAddress();
-        final int port = TestSuiteEnvironment.getServerPort();
-        final ModelControllerClient client = TestSuiteEnvironment.getModelControllerClient(null, address, port + LB_OFFSET);
+        final ModelControllerClient client = getModelControllerClient();
 
         final ModelNode compositeOp = new ModelNode();
         compositeOp.get(OP).set(COMPOSITE);
@@ -339,6 +492,15 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         ServerReload.reloadIfRequired(client);
     }
 
+    /*
+     * Get a management client to the load balancer for performing management operations.
+     */
+    private ModelControllerClient getModelControllerClient() {
+        final String address = TestSuiteEnvironment.getServerAddress();
+        final int port = TestSuiteEnvironment.getServerPort();
+        final ModelControllerClient client = TestSuiteEnvironment.getModelControllerClient(null, address, port + LB_OFFSET);
+        return client;
+    }
     /*
      * This server setup task registers each of the servers with the load balancer.
      */
