@@ -5,6 +5,7 @@
 
 package org.wildfly.extension.undertow;
 
+import io.undertow.UndertowLogger;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.CookieImpl;
 import io.undertow.server.session.SecureRandomSessionIdGenerator;
@@ -48,12 +49,16 @@ public class RemoteHttpInvokerService implements Service<PathHandler> {
     private HttpHandler getAffinityServiceHandler() {
         PathHandler wrappedHandler = new PathHandler();
         SecureRandomSessionIdGenerator generator = new SecureRandomSessionIdGenerator();
+        // handler for assigning a HTTP session id to the response
         wrappedHandler.addPrefixPath(AFFINITY_PATH, exchange -> {
             String resolved = exchange.getResolvedPath();
+            UndertowLogger.ROOT_LOGGER.debugf("RemoteHttpInvokerService: handling affinity request for path %s", resolved);
+            // unclear of this should be affinity path or common path
             int index = resolved.lastIndexOf(COMMON_PATH);
             if(index > 0) {
                 resolved = resolved.substring(0, index);
             }
+            UndertowLogger.ROOT_LOGGER.debugf("RemoteHttpInvokerService: setting response Cookie with path %s", resolved);
             exchange.getResponseCookies().put("JSESSIONID", new CookieImpl("JSESSIONID", generator.createSessionId()).setPath(resolved));
         });
         return HttpServiceConfig.getInstance().wrap(wrappedHandler);

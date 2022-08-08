@@ -437,4 +437,6 @@ public interface UndertowLogger extends BasicLogger {
     @Message(id = 113, value = "Unable to apply Jakarta Authorization Policy - unexpected SecurityContext type: %s")
     void unexpectedSecurityContextType(String securityContextClassName);
 
+    @Message(id = 114, value = "The request scheme '%s' has no matching Undertow listener.")
+    IllegalStateException requestSchemeHasNoListener(String requestScheme);
 }
