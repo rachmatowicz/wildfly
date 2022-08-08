@@ -439,4 +439,7 @@ public interface UndertowLogger extends BasicLogger {
     @Message(id = 109, value = "The deployment is configured to use legacy security which is no longer supported.")
     StartException legacySecurityUnsupported();
 
+    @Message(id = 110, value = "The request scheme '%s' has no matching Undertow listener.")
+    IllegalStateException requestSchemeHasNoListener(String requestScheme);
+
 }
