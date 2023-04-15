@@ -58,7 +58,6 @@ import javax.naming.Context;
 
 @ServerSetup(TwoConnectorsEJBFailoverTestCase.ServerSetupTask.class)
 @RunWith(Arquillian.class)
-@Ignore("WFLY-17605")
 public class TwoConnectorsEJBFailoverTestCase extends AbstractClusteringTestCase {
 
     private static final int COUNT = 20;
@@ -134,6 +133,10 @@ public class TwoConnectorsEJBFailoverTestCase extends AbstractClusteringTestCase
      * A SFSB failover test which accepts an EJBDirectory provider parameter to adjust client behaviour
      */
     public void test(ExceptionSupplier<EJBDirectory, Exception> directoryProvider) throws Exception {
+
+        // give the servers a moment to stabilize before invocation start
+        Thread.sleep(CLIENT_TOPOLOGY_UPDATE_WAIT);
+
         try (EJBDirectory directory = directoryProvider.get()) {
             Incrementor bean = directory.lookupStateful(StatefulIncrementorBean.class, Incrementor.class);
 
