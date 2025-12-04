@@ -33,6 +33,7 @@ import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.Disabled;
 
 /**
  * Validates inhibition of failover behavior of a remotely accessed @Stateful EJB within the context of a transaction.
@@ -62,6 +63,7 @@ public class TransactionalRemoteStatefulEJBFailoverTestCase extends AbstractClus
                 ;
     }
 
+    @Disabled("Until WFLY-21094 is fixed")
     @Test
     void test(
             @ArquillianResource @OperateOnDeployment(DEPLOYMENT_1) ManagementClient client1,

@@ -38,6 +38,7 @@ import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -338,6 +339,7 @@ public class TransactionalRemoteStatelessTestCase extends AbstractClusteringTest
      * {@link TransactionalRemoteStatefulEJBFailoverTestCase#test(ManagementClient, ManagementClient)}
      * but this test works with a stateless bean.
      */
+    @Disabled("Until WFLY-21094 is fixed")
     @Test
     void affinityNodeFailure() throws Exception {
         InitialContext initCtx = getInitialContext(InitialContextLookupType.REMOTE_HTTP, TESTSUITE_NODE0);
