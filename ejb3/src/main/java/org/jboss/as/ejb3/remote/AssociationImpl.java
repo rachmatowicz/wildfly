@@ -22,6 +22,8 @@ import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.ejb.EJBException;
@@ -61,6 +63,7 @@ import org.jboss.ejb.server.ModuleAvailabilityListener;
 import org.jboss.ejb.server.Request;
 import org.jboss.ejb.server.SessionOpenRequest;
 import org.jboss.invocation.InterceptorContext;
+import org.jboss.logging.Logger;
 import org.wildfly.clustering.server.Group;
 import org.wildfly.clustering.server.GroupMember;
 import org.wildfly.clustering.server.Registration;
@@ -75,6 +78,8 @@ import org.wildfly.security.manager.WildFlySecurityManager;
  * @author <a href="mailto:jbaesner@redhat.com">Joerg Baesner</a>
  */
 final class AssociationImpl implements Association, AutoCloseable {
+
+    private static final Logger log = Logger.getLogger(AssociationImpl.class.getSimpleName());
 
     private static final String RETURNED_CONTEXT_DATA_KEY = "jboss.returned.keys";
     private static final ListenerHandle NOOP_LISTENER_HANDLE = new ListenerHandle() {
@@ -396,6 +401,9 @@ final class AssociationImpl implements Association, AutoCloseable {
 
     @Override
     public ListenerHandle registerModuleAvailabilityListener(@NotNull final ModuleAvailabilityListener moduleAvailabilityListener) {
+        // thread pool for executing module availability listener callbacks
+        final ExecutorService moduleAvailabilityEventExecutor = Executors.newFixedThreadPool(10);
+
         final ModuleAvailabilityRegistrarListener listener = new ModuleAvailabilityRegistrarListener() {
             String currentNode = AssociationImpl.this.serverEnvironment.getNodeName();
 
@@ -405,7 +413,6 @@ final class AssociationImpl implements Association, AutoCloseable {
                 EjbLogger.EJB3_INVOCATION_LOGGER.infof(" listenerAdded(%s) (repository suspended = %s, modules = %s)", currentNode, deploymentRepository.isSuspended(), registrar.getServices());
 
                 if (!deploymentRepository.isSuspended()) {
-                    System.out.println("Contacting registrar for services");
                     // only send out the initial list if the deployment repository (i.e. the server + clean transaction state) is not in a suspended state
                     for (EJBModuleIdentifier moduleId : moduleAvailabilityRegistrar.getServices()) {
                         // for each service, add to the list of we are in the providers set
@@ -421,7 +428,9 @@ final class AssociationImpl implements Association, AutoCloseable {
                 }
                 if (true) {
                     EjbLogger.EJB3_INVOCATION_LOGGER.infof("listenerAdded (%s): sending modules %s to client", currentNode, list);
-                    moduleAvailabilityListener.moduleAvailable(list);
+                    log.infof("Calling DeploymentRepository listener: modulesAvailable: %s",list);
+                    moduleAvailabilityEventExecutor.execute(() -> moduleAvailabilityListener.moduleAvailable(list));
+                    // moduleAvailabilityListener.moduleAvailable(list);
                 }
             }
 
@@ -438,7 +447,10 @@ final class AssociationImpl implements Association, AutoCloseable {
                 }
                 if (!list.isEmpty()) {
                     EjbLogger.EJB3_INVOCATION_LOGGER.infof("modulesAvailable(%s): sending modules %s to client", currentNode, list);
-                    moduleAvailabilityListener.moduleAvailable(list);
+                    // execute listener async
+                    log.infof("Calling DeploymentRepository listener: modulesAvailable: %s",list);
+                    moduleAvailabilityEventExecutor.execute(() -> moduleAvailabilityListener.moduleAvailable(list));
+                    // moduleAvailabilityListener.moduleAvailable(list);
                 }
             }
 
@@ -455,7 +467,9 @@ final class AssociationImpl implements Association, AutoCloseable {
                 }
                 if (!list.isEmpty()) {
                     EjbLogger.EJB3_INVOCATION_LOGGER.infof(" modulesUnavailable(%s): sending modules %s to client", currentNode, list);
-                    moduleAvailabilityListener.moduleUnavailable(list);
+                    log.infof("Calling DeploymentRepositoryListener: modulesUnavailable: %s",list);
+                    moduleAvailabilityEventExecutor.execute(() -> moduleAvailabilityListener.moduleUnavailable(list));
+                    // moduleAvailabilityListener.moduleUnavailable(list);
                 }
             }
         };
@@ -480,6 +494,9 @@ final class AssociationImpl implements Association, AutoCloseable {
         private final Set<ClusterTopologyListener> clusterTopologyListeners = ConcurrentHashMap.newKeySet();
         private final Registry<GroupMember, String, List<ClientMapping>> clientMappingRegistry;
         private final Registration listenerRegistration;
+        // thread pool executor for async execution of client mappings registry changes
+        private final ExecutorService clusterTopologyEventExecutor = Executors.newFixedThreadPool(10);
+        private final Logger log = Logger.getLogger(ClusterTopologyRegistrar.class.getSimpleName());
 
         ClusterTopologyRegistrar(Registry<GroupMember, String, List<ClientMapping>> clientMappingRegistry) {
             this.clientMappingRegistry = clientMappingRegistry;
@@ -488,10 +505,13 @@ final class AssociationImpl implements Association, AutoCloseable {
 
         @Override
         public void added(Map<String, List<ClientMapping>> added) {
+
             ClusterTopologyListener.ClusterInfo info = getClusterInfo(added);
             for (ClusterTopologyListener listener : this.clusterTopologyListeners) {// Synchronize each listener to ensure that the initial topology was set before processing new entries
                 synchronized (listener) {
-                    listener.clusterNewNodesAdded(info);
+                    log.infof("Calling Registry callback: added: %s",added);
+                    clusterTopologyEventExecutor.execute(() -> listener.clusterNewNodesAdded(info));
+                    // listener.clusterNewNodesAdded(info);
                 }
             }
         }
@@ -506,7 +526,9 @@ final class AssociationImpl implements Association, AutoCloseable {
             List<ClusterTopologyListener.ClusterRemovalInfo> removals = Collections.singletonList(new ClusterTopologyListener.ClusterRemovalInfo(this.clientMappingRegistry.getGroup().getName(), new ArrayList<>(removed.keySet())));
             for (ClusterTopologyListener listener : this.clusterTopologyListeners) {// Synchronize each listener to ensure that the initial topology was set before processing removed entries
                 synchronized (listener) {
-                    listener.clusterNodesRemoved(removals);
+                    log.infof("Calling Registry callback: removed: %s",removed);
+                    clusterTopologyEventExecutor.execute(() -> listener.clusterNodesRemoved(removals));
+                    // listener.clusterNodesRemoved(removals);
                 }
             }
         }
@@ -515,7 +537,9 @@ final class AssociationImpl implements Association, AutoCloseable {
             // Synchronize on the listener to ensure that the initial topology is set before processing any changes from the registry listener
             synchronized (listener) {
                 this.clusterTopologyListeners.add(listener);
-                listener.clusterTopology(!this.clientMappingRegistry.getGroup().isSingleton() ? Collections.singletonList(getClusterInfo(this.clientMappingRegistry.getEntries())) : Collections.emptyList());
+                log.infof("Calling Registry callback: cluster topology %s", "map of entries");
+                clusterTopologyEventExecutor.execute(() -> listener.clusterTopology(!this.clientMappingRegistry.getGroup().isSingleton() ? Collections.singletonList(getClusterInfo(this.clientMappingRegistry.getEntries())) : Collections.emptyList()));
+                // listener.clusterTopology(!this.clientMappingRegistry.getGroup().isSingleton() ? Collections.singletonList(getClusterInfo(this.clientMappingRegistry.getEntries())) : Collections.emptyList());
             }
             return () -> this.clusterTopologyListeners.remove(listener);
         }
@@ -566,7 +590,9 @@ final class AssociationImpl implements Association, AutoCloseable {
                 String cluster = this.clientMappingRegistry.getGroup().getName();
                 for (ClusterTopologyListener listener : this.clusterTopologyListeners) {
                     // send the clusterRemoval message to the listener
-                    listener.clusterRemoval(Arrays.asList(cluster));
+                    log.infof("Calling Registry callback: removed: %s",Arrays.asList(cluster));
+                    clusterTopologyEventExecutor.execute(() -> listener.clusterRemoval(Arrays.asList(cluster)));
+                    // listener.clusterRemoval(Arrays.asList(cluster));
                 }
             }
         }
