@@ -297,7 +297,7 @@ class EJB3SubsystemAdd extends AbstractBoottimeAddStepHandler {
         final RemoteObjectSubstitutionService substitutionService = new RemoteObjectSubstitutionService();
         serviceTarget.addService(RemoteObjectSubstitutionService.SERVICE_NAME, substitutionService)
                 .addDependency(DeploymentRepositoryService.SERVICE_NAME, DeploymentRepository.class, substitutionService.getDeploymentRepositoryInjectedValue())
-                .setInitialMode(ServiceController.Mode.ON_DEMAND)
+                .setInitialMode(ServiceController.Mode.PASSIVE)
                 .install();
 
         // register EJB context selector

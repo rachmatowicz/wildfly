@@ -28,6 +28,7 @@ import org.jboss.msc.service.StopContext;
 import org.jboss.msc.value.InjectedValue;
 
 import jakarta.ejb.HomeHandle;
+import org.wildfly.iiop.openjdk.logging.IIOPLogger;
 
 /**
  * @author Stuart Douglas
@@ -45,6 +46,7 @@ public class RemoteObjectSubstitutionService implements RemoteObjectSubstitution
         final DeploymentRepository deploymentRepository = deploymentRepositoryInjectedValue.getOptionalValue();
         //if we are not started yet just return
         if (deploymentRepository == null) {
+            IIOPLogger.ROOT_LOGGER.warn("RemoteObjectSubstitutionService: writeReplaceRemote cannot cast result - deploymentRepository is null");
             return object;
         }
 
