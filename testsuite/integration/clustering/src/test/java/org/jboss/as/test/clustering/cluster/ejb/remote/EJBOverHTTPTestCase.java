@@ -21,12 +21,29 @@
  */
 package org.jboss.as.test.clustering.cluster.ejb.remote;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.CHILD_TYPE;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.COMPOSITE;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.INCLUDE_RUNTIME;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OUTCOME;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.READ_CHILDREN_NAMES_OPERATION;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RECURSIVE;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RESULT;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.STEPS;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUCCESS;
+import static org.jboss.as.test.integration.management.util.ModelUtil.modelNodeAsStingList;
+
 import java.net.URL;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.PropertyPermission;
+import java.util.Set;
 
 import javax.naming.Context;
 import jakarta.servlet.http.HttpServletResponse;
@@ -36,11 +53,10 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.HttpClientUtils;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.jboss.arquillian.junit5.ArquillianExtension;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
-import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.arquillian.junit.InSequence;
 import org.jboss.as.arquillian.api.ServerSetup;
 import org.jboss.as.controller.client.ModelControllerClient;
 import org.jboss.as.controller.PathAddress;
@@ -57,9 +73,9 @@ import org.jboss.as.test.clustering.ejb.RemoteEJBDirectory;
 import org.jboss.as.test.http.util.TestHttpClientUtils;
 import org.jboss.as.test.integration.security.common.Utils;
 import org.jboss.as.test.shared.CLIServerSetupTask;
+import org.jboss.as.test.shared.PermissionUtils;
 import org.jboss.as.test.shared.ServerReload;
 import org.jboss.as.test.shared.TestSuiteEnvironment;
-import org.jboss.as.test.shared.integration.ejb.security.PermissionUtils;
 import org.jboss.dmr.ModelNode;
 import org.jboss.ejb.client.Affinity;
 import org.jboss.ejb.client.EJBClient;
@@ -67,30 +83,18 @@ import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.After;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.wildfly.transaction.client.AbstractTransaction;
 import org.wildfly.transaction.client.ContextTransactionManager;
 
 import org.wildfly.common.function.ExceptionSupplier;
-
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.CHILD_TYPE;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.COMPOSITE;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.INCLUDE_RUNTIME;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OUTCOME;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.READ_CHILDREN_NAMES_OPERATION;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RECURSIVE;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RESULT;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.STEPS;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUCCESS;
-import static org.jboss.as.test.integration.management.util.ModelUtil.modelNodeAsStingList;
 
 /**
  * A test case for the key features of EJB/HTTP when used in conjunction with a load balancer,
@@ -106,8 +110,9 @@ import static org.jboss.as.test.integration.management.util.ModelUtil.modelNodeA
  * @author Richard Achmatowicz
  */
 @RunAsClient
-@RunWith(Arquillian.class)
+@ExtendWith(ArquillianExtension.class)
 @ServerSetup(EJBOverHTTPTestCase.ServerSetupTask.class)
+@TestMethodOrder(OrderAnnotation.class)
 public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
 
     private static final int COUNT = 4;
@@ -162,16 +167,16 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
     }
 
     public EJBOverHTTPTestCase() {
-        super(new String[] { NODE_1, NODE_2, LOAD_BALANCER_1 }, new String[]{ DEPLOYMENT_1, DEPLOYMENT_2, DEPLOYMENT_3, DEPLOYMENT_4 });
+        super(Set.of(NODE_1, NODE_2, LOAD_BALANCER_1), Set.of(DEPLOYMENT_1, DEPLOYMENT_2, DEPLOYMENT_3, DEPLOYMENT_4));
     }
 
-    @Before
+    @BeforeEach
     public void beforeTest() throws Exception {
         log.infof(MODULE_NAME+ " : running before test ");
         installRequestDumperIntoLoadBalancer();
     }
 
-    @After
+    @AfterEach
     public void afterTest() throws Exception {
         log.infof(MODULE_NAME+ " : running after test ");
         removeRequestDumperFromLoadBalancer();
@@ -180,7 +185,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
     /*
      * Check to see that the load balancer, so configured, will balance HTTP servlet requests correctly.
      */
-    @InSequence(1)
+    @Order(1)
     @Test
     public void testLoadBalancer() throws Exception {
         log.infof(MODULE_NAME+ " : testLoadBalancer: starting test");
@@ -192,7 +197,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         try (CloseableHttpClient client = TestHttpClientUtils.promiscuousCookieHttpClient()) {
             HttpResponse response = client.execute(new HttpGet(uri));
             try {
-                Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
+                assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
                 log.infof("first HTTP request went to %s", response.getFirstHeader("nodename").getValue());
             } finally {
                 HttpClientUtils.closeQuietly(response);
@@ -200,7 +205,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
 
             response = client.execute(new HttpGet(uri));
             try {
-                Assert.assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
+                assertEquals(HttpServletResponse.SC_OK, response.getStatusLine().getStatusCode());
                 log.infof("second HTTP request went to %s", response.getFirstHeader("nodename").getValue());
             } finally {
                 HttpClientUtils.closeQuietly(response);
@@ -208,7 +213,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         }
     }
 
-    @InSequence(2)
+    @Order(2)
     @Test
     public void testSLSBWithoutFailover() throws Exception {
         waitForProxyRegistration();
@@ -217,7 +222,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         testSLSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
     }
 
-    @InSequence(3)
+    @Order(3)
     @Test
     public void testSFSBWithoutFailover() throws Exception {
         waitForProxyRegistration();
@@ -226,7 +231,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         testSFSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
     }
 
-    @InSequence(4)
+    @Order(4)
     @Test
     public void testSFSBAndSLSBWithoutFailover() throws Exception {
         waitForProxyRegistration();
@@ -235,7 +240,7 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         testSFSBAndSLSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
     }
 
-    @InSequence(5)
+    @Order(5)
     @Test
     public void testMultipleSFSBWithoutFailover() throws Exception {
         waitForProxyRegistration();
@@ -244,8 +249,8 @@ public class EJBOverHTTPTestCase extends AbstractClusteringTestCase {
         testMultipleSFSBWithoutFailover(() -> new RemoteEJBDirectory(MODULE_NAME, getProperties(false)));
     }
 
-    @Ignore
-    @InSequence(6)
+    @Disabled
+    @Order(6)
     @Test
     public void testSFSBInTransactionWithoutFailover() throws Exception {
         waitForProxyRegistration();
