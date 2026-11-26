@@ -568,7 +568,17 @@ final class DeploymentsAssociationImpl implements Association, AutoCloseable {
             Map<String, List<ClientMapping>> entries = this.clientMappingRegistry.getEntries();
             boolean loneMember = localEntry != null ? (entries.size() == 1) && entries.containsKey(localEntry.getKey()) : entries.isEmpty();
 
+            if (EjbLogger.DEPLOYMENT_LOGGER.isTraceEnabled())
+                EjbLogger.DEPLOYMENT_LOGGER.tracef("Calling sendTopologyUpdateIfLastNodeToLeave() for registrar: nodes in cluster = %s, lone member = %s ", entries.keySet() , loneMember);
+
+            System.out.printf("DeploymentsAssociationImpl: Calling sendTopologyUpdateIfLastNodeToLeave() for registrar: nodes in cluster = %s, lone member = %s ", entries.keySet() , loneMember);
+
             if (loneMember) {
+                if (EjbLogger.DEPLOYMENT_LOGGER.isTraceEnabled())
+                    EjbLogger.DEPLOYMENT_LOGGER.trace("Sending cluster removal message to ClusterTopologyListeners");
+
+                System.out.printf("DeploymentsAssociationImp: Sending cluster removal message to ClusterTopologyListeners");
+
                 String cluster = this.clientMappingRegistry.getGroup().getName();
                 for (ClusterTopologyListener listener : this.clusterTopologyListeners) {
                     // send the clusterRemoval message to the listener
@@ -710,6 +720,9 @@ final class DeploymentsAssociationImpl implements Association, AutoCloseable {
      * (i.e. effectively leaving the cluster)
      */
     void sendTopologyUpdateIfLastNodeToLeave() {
+        if (EjbLogger.DEPLOYMENT_LOGGER.isTraceEnabled())
+            EjbLogger.DEPLOYMENT_LOGGER.trace("Calling sendTopologyUpdateIfLastNodeToLeave() for all registrars");
+
         for (ClusterTopologyRegistrar registrar : this.clusterTopologyRegistrars.values()) {
             registrar.sendTopologyUpdateIfLastNodeToLeave();
         }
